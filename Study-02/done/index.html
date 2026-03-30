@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DONE</title>
+  <link rel="stylesheet" href="style.css" />
+  <!-- 다크 모드 FOUC 방지: body 렌더 전 즉시 테마 적용 -->
+  <script>
+    if (localStorage.getItem('done_theme') === 'dark') {
+      document.documentElement.classList.add('dark');
+    }
+  </script>
+</head>
+<body>
+  <div id="app">
+    <header id="header">
+      <div id="header-top">
+        <h1>DONE</h1>
+        <button id="theme-toggle" aria-label="테마 전환">🌙</button>
+        <svg id="gauge" viewBox="0 0 80 80" width="80" height="80" aria-hidden="true">
+          <circle cx="40" cy="40" r="34"
+            fill="none" stroke="var(--border)" stroke-width="6"/>
+          <circle id="gauge-progress" cx="40" cy="40" r="34"
+            fill="none" stroke="var(--accent)" stroke-width="6"
+            stroke-linecap="round"
+            stroke-dasharray="0 213.6"
+            transform="rotate(-90 40 40)"/>
+          <text id="gauge-text" x="40" y="40"
+            text-anchor="middle" dominant-baseline="central"
+            font-size="14" font-weight="600" fill="var(--accent)">0%</text>
+        </svg>
+        <div id="cat-counters" aria-hidden="true">
+          <div class="cat-counter" data-cat="work">
+            <span class="cat-dot cat-work"></span>
+            <span class="cat-counter-label">업무</span>
+            <span class="cat-counter-value" id="counter-work">0 / 0</span>
+          </div>
+          <div class="cat-counter" data-cat="personal">
+            <span class="cat-dot cat-personal"></span>
+            <span class="cat-counter-label">개인</span>
+            <span class="cat-counter-value" id="counter-personal">0 / 0</span>
+          </div>
+          <div class="cat-counter" data-cat="study">
+            <span class="cat-dot cat-study"></span>
+            <span class="cat-counter-label">공부</span>
+            <span class="cat-counter-value" id="counter-study">0 / 0</span>
+          </div>
+        </div>
+      </div>
+      <p id="header-summary" aria-live="polite"></p>
+    </header>
+
+    <nav id="filters" role="tablist" aria-label="카테고리 필터">
+      <button class="filter-tab active" role="tab" aria-selected="true"  data-filter="all">전체</button>
+      <button class="filter-tab"        role="tab" aria-selected="false" data-filter="work">업무</button>
+      <button class="filter-tab"        role="tab" aria-selected="false" data-filter="personal">개인</button>
+      <button class="filter-tab"        role="tab" aria-selected="false" data-filter="study">공부</button>
+      <button id="clear-completed" style="display:none" aria-label="완료된 할 일 전체 삭제">완료 삭제 (0)</button>
+    </nav>
+
+    <section id="input-area">
+      <select id="category-select" aria-label="카테고리 선택">
+        <option value="work">업무</option>
+        <option value="personal">개인</option>
+        <option value="study">공부</option>
+      </select>
+      <input
+        id="task-input"
+        type="text"
+        placeholder="할 일을 입력하세요 (Enter로 추가)"
+        maxlength="200"
+        autocomplete="off"
+        aria-label="새 할 일 입력"
+      />
+      <button id="add-btn">추가</button>
+    </section>
+
+    <ul id="task-list" aria-label="할 일 목록"></ul>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
