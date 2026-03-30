@@ -1,0 +1,707 @@
+▗ ▗   ▖ ▖  Claude Code v2.1.87
+           Sonnet 4.6 · Claude Pro
+  ▘▘ ▝▝    ~/Desktop/SG/VibeCoding/Study-02
+
+❯ 기능 중에 타이머 기능도 추가해줘                                              
+
+  Read 3 files (ctrl+o to expand)
+  ⎿  Interrupted · What should Claude do instead?
+
+❯ 내가 방금 기능 요구를 하고 중간에 끊었는데 파일엔 이상 없는거지?              
+
+⏺ 네, 파일에 이상 없습니다. 요청이 중단되었을 때 저는 파일을 읽기만 했고
+  아무것도 수정하지 않았습니다.
+
+  세 파일 모두 원본 그대로입니다:
+  - index.html — 변경 없음
+  - app.js — 변경 없음
+  - style.css — 변경 없음
+
+  타이머 기능 추가를 계속 진행할까요?
+
+❯ # DONE 앱 — 타이머 기능 추가                                                  
+                                                                                
+기존 app.js, style.css, index.html에 타이머 기능을 추가해 줘.                   
+외부 라이브러리 없이 순수 JS만 사용.                                            
+                                                                                
+## 1. 포모도로 패널 (헤더 아래 고정 영역)                                       
+                                                                                
+index.html — #header 아래에 #pomodoro 영역 추가:                                
+  [🍅 포모도로]  [25:00]  [▶ 시작]  [↺ 리셋]  [집중 / 휴식 뱃지]                
+                                                                                
+포모도로 상태 변수 (app.js):                                                    
+  const POMODORO = { focus: 25 * 60, shortBreak: 5 * 60 }                       
+  let pomState = {                                                              
+    mode: 'focus',      // 'focus' | 'break'                                    
+    remaining: POMODORO.focus,                                                  
+    running: false,                                                             
+    intervalId: null,                                                           
+    round: 0            // 완료한 포모도로 횟수                                 
+  }                                                                             
+                                                                                
+함수:                                                                           
+  startPomodoro()   → setInterval 1초, remaining-- → updatePomDisplay()         
+  pausePomodoro()   → clearInterval, running = false                            
+  resetPomodoro()   → clearInterval, 상태 초기화, 디스플레이 리셋               
+  tickPomodoro()    → remaining === 0 이면 onPomComplete() 호출                 
+  onPomComplete()   → round++, mode 전환(focus↔break), remaining 재설정         
+                      → playDoneSound() → showPomToast()                        
+  updatePomDisplay() → MM:SS 포맷, 버튼 텍스트, 모드 배지 갱신                  
+                                                                                
+MM:SS 포맷 함수:                                                                
+  function formatTime(sec) {                                                    
+    const m = Math.floor(sec / 60).toString().padStart(2, '0')                  
+    const s = (sec % 60).toString().padStart(2, '0')                            
+    return m + ':' + s                                                          
+  }                                                                             
+                                                                                
+포모도로 완료 토스트:                                                           
+  집중 완료 → "🍅 집중 완료! 휴식을 시작해요. (N번째)"                          
+  휴식 완료 → "☕ 휴식 완료! 다시 집중해볼까요?"                                
+  3초 후 자동 소멸 (기존 Undo 토스트와 별도 엘리먼트)                           
+                                                                                
+## 2. 할 일 카드별 개별 타이머 (스톱워치)                                       
+                                                                                
+Task 객체에 필드 추가 (기존 스펙 확장):                                         
+  elapsed: number   // 누적 경과 초, 기본값 0                                   
+  // 기존 localStorage 데이터 호환: elapsed 없으면 0으로 fallback               
+                                                                                
+카드 UI 추가 (renderTasks 수정):                                                
+  카드 하단에 타이머 행 추가:                                                   
+  [⏱ 00:00:00]  [▶]  ← 미실행 상태                                              
+  [⏱ 00:03:27]  [⏸]  ← 실행 중 상태                                             
+                                                                                
+  HH:MM:SS 포맷 (elapsed 1시간 미만이면 MM:SS만 표시):                          
+  function formatElapsed(sec) {                                                 
+    if (sec < 3600) return formatTime(sec)                                      
+    const h = Math.floor(sec / 3600)                                            
+    return h + ':' + formatTime(sec % 3600)                                     
+  }                                                                             
+                                                                                
+카드 타이머 상태 (전역 Map으로 관리):                                           
+  const cardTimers = new Map()                                                  
+  // key: task.id, value: { intervalId, running }                               
+                                                                                
+  startCardTimer(taskId)  → 해당 카드의 intervalId 시작                         
+                            1초마다 tasks[id].elapsed++                         
+                            → saveToStorage() → 카드 타이머 표시만 업데이트     
+                            (전체 renderTasks() 호출 금지 — 깜빡임 방지)        
+  stopCardTimer(taskId)   → clearInterval, running = false                      
+  toggleCardTimer(taskId) → running이면 stop, 아니면 start                      
+                                                                                
+카드 타이머 디스플레이 업데이트 (부분 DOM 업데이트):                            
+  function updateCardTimerDisplay(taskId) {                                     
+    const el = document.querySelector(`[data-id="${taskId}"] .card-timer-text`) 
+    if (!el) return                                                             
+    const task = tasks.find(t => t.id === taskId)                               
+    if (task) el.textContent = '⏱ ' + formatElapsed(task.elapsed)               
+  }                                                                             
+                                                                                
+완료된 task 카드 타이머:                                                        
+  완료 토글 시 해당 카드 타이머 자동 정지 (stopCardTimer 호출)                  
+  elapsed는 보존 (기록으로 남김)                                                
+                                                                                
+## 3. 완료 알림 (Web Audio API)                                                 
+                                                                                
+외부 음원 파일 없이 오실레이터로 생성:                                          
+                                                                                
+  function playDoneSound() {                                                    
+    try {                                                                       
+      const ctx = new (window.AudioContext || window.webkitAudioContext)()      
+      const osc = ctx.createOscillator()                                        
+      const gain = ctx.createGain()                                             
+      osc.connect(gain)                                                         
+      gain.connect(ctx.destination)                                             
+      osc.frequency.setValueAtTime(880, ctx.currentTime)                        
+      osc.frequency.setValueAtTime(660, ctx.currentTime + 0.15)                 
+      gain.gain.setValueAtTime(0.3, ctx.currentTime)                            
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6)      
+      osc.start(ctx.currentTime)                                                
+      osc.stop(ctx.currentTime + 0.6)                                           
+    } catch(e) { /* 소리 미지원 환경 무시 */ }                                  
+  }                                                                             
+                                                                                
+포모도로 완료 시에만 playDoneSound() 호출.                                      
+카드 타이머는 소리 없음 (방해 방지).                                            
+                                                                                
+## 4. style.css 추가                                                            
+                                                                                
+포모도로 패널:                                                                  
+  #pomodoro {                                                                   
+    display: flex; align-items: center; gap: 16px;                              
+    padding: 12px 0; border-bottom: 1px solid var(--border);                    
+    font-family: 'SF Mono', 'Fira Code', monospace;                             
+  }                                                                             
+  #pom-display { font-size: 28px; font-weight: 600; color: var(--accent);       
+min-width: 90px; }                                                              
+  #pom-mode    { font-size: 11px; padding: 2px 8px; border-radius: 10px;        
+                 background: var(--surface); border: 1px solid var(--border); } 
+  #pom-mode.focus { color: var(--accent); border-color: var(--accent); }        
+  #pom-mode.break { color: var(--cat-study); border-color: var(--cat-study); }  
+                                                                                
+카드 타이머 행:                                                                 
+  .card-timer { display: flex; align-items: center; gap: 8px;                   
+                margin-top: 8px; padding-top: 8px;                              
+                border-top: 1px solid var(--border); }                          
+  .card-timer-text { font-family: 'SF Mono','Fira Code',monospace;              
+                     font-size: 12px; color: var(--muted); }                    
+  .card-timer-text.running { color: var(--accent); }                            
+  .card-timer-btn { font-size: 11px; padding: 2px 8px; border-radius: 6px;      
+                    border: 1px solid var(--border); background: transparent;   
+                    cursor: pointer; color: var(--muted); }                     
+  .card-timer-btn:hover { border-color: var(--accent); color: var(--accent); }  
+                                                                                
+## 5. 탭 비활성 시 타이머 유지                                                  
+                                                                                
+document.addEventListener('visibilitychange', () => {                           
+  // 탭이 숨겨져도 setInterval은 계속 동작함 — 별도 처리 불필요                 
+  // 단, 탭 복귀 시 포모도로 디스플레이 즉시 갱신                               
+  if (!document.hidden) updatePomDisplay()                                      
+})                                                                              
+                                                                                
+## 완료 기준                                                                    
+□ 포모도로 시작/일시정지/리셋 정상 동작                                         
+□ 25분 → 소리 → 휴식 5분 자동 전환                                              
+□ 카드 ▶ 버튼으로 개별 타이머 토글                                              
+□ elapsed 새로고침 후에도 복원                                                  
+□ 완료된 카드 타이머 자동 정지                                                  
+□ AudioContext 미지원 환경에서 에러 없음                                        
+
+⏺ 모든 파일을 파악했으니 구현하겠습니다.
+
+⏺ Update(done/index.html)
+  ⎿  Error editing file
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+⏺ Update(done/index.html)
+  ⎿  Added 7 lines
+      49          </div>
+      50        </div>
+      51        <p id="header-summary" aria-live="polite"></p>
+      52 +      <div id="pomodoro">                                      
+      53 +        <span id="pom-label">🍅 포모도로</span>                
+      54 +        <span id="pom-display">25:00</span>                    
+      55 +        <button id="pom-start" aria-label="포모도로 시작/일시정
+         +지">▶ 시작</button>                                            
+      56 +        <button id="pom-reset" aria-label="포모도로 리셋">↺ 리 
+         +셋</button>                                                    
+      57 +        <span id="pom-mode" class="focus">집중</span>          
+      58 +      </div>                                                   
+      59      </header>
+      60  
+      61      <nav id="filters" role="tablist" aria-label="카테고리 필터"
+          >
+
+⏺ 이제 app.js를 수정합니다. 여러 단계로 나눠서 진행합니다.
+
+⏺ Update(done/app.js)
+  ⎿  Added 1 line
+       9  const STORAGE_KEY  = 'done_tasks';
+      10  const THEME_KEY    = 'done_theme';
+      11  const MAX_TEXT_LEN = 200;
+      12 +const POMODORO = { focus: 25 * 60, shortBreak: 5 * 60 };       
+      13  
+      14  const CATEGORY_LABEL = {
+      15    all:      '전체',
+
+⏺ Update(done/app.js)
+  ⎿  Added 9 lines
+      25  let undoTimer     = null;
+      26  let dragSrcId     = null;
+      27  
+      28 +let pomState = {                                               
+      29 +  mode:       'focus',                                         
+      30 +  remaining:  POMODORO.focus,                                  
+      31 +  running:    false,                                           
+      32 +  intervalId: null,                                            
+      33 +  round:      0,                                               
+      34 +};                                                             
+      35 +const cardTimers = new Map();                                  
+      36 +                                                               
+      37  /* ── Storage ── */
+      38  // ✓ OK: QuotaExceededError catch → 콘솔 경고, 앱 크래시 방지
+      39  function saveToStorage() {
+
+⏺ Update(done/app.js)
+  ⎿  Added 13 lines
+      76    return { ok: true, value: trimmed };
+      77  }
+      78  
+      79 +/* ── Timer Helpers ── */                                      
+      80 +function formatTime(sec) {                                     
+      81 +  const m = Math.floor(sec / 60).toString().padStart(2, '0');  
+      82 +  const s = (sec % 60).toString().padStart(2, '0');            
+      83 +  return m + ':' + s;                                          
+      84 +}                                                              
+      85 +                                                               
+      86 +function formatElapsed(sec) {                                  
+      87 +  if (sec < 3600) return formatTime(sec);                      
+      88 +  const h = Math.floor(sec / 3600);                            
+      89 +  return h + ':' + formatTime(sec % 3600);                     
+      90 +}                                                              
+      91 +                                                               
+      92  /* ── Theme ── */
+      93  // documentElement(html)에 클래스를 적용 → 인라인 스크립트와 동
+          일한 대상으로 FOUC 방지
+      94  // ✓ OK: 다크/라이트 전환 즉시 적용, 새로고침 후 유지
+
+⏺ Update(done/app.js)
+  ⎿  Added 17 lines
+      103    applyTheme(next);
+      104  }
+      105  
+      106 +/* ── Audio ── */                                             
+      107 +function playDoneSound() {                                    
+      108 +  try {                                                       
+      109 +    const ctx  = new (window.AudioContext || window.webkitAudi
+          +oContext)();                                                  
+      110 +    const osc  = ctx.createOscillator();                      
+      111 +    const gain = ctx.createGain();                            
+      112 +    osc.connect(gain);                                        
+      113 +    gain.connect(ctx.destination);                            
+      114 +    osc.frequency.setValueAtTime(880, ctx.currentTime);       
+      115 +    osc.frequency.setValueAtTime(660, ctx.currentTime + 0.15);
+      116 +    gain.gain.setValueAtTime(0.3, ctx.currentTime);           
+      117 +    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentT
+          +ime + 0.6);                                                   
+      118 +    osc.start(ctx.currentTime);                               
+      119 +    osc.stop(ctx.currentTime + 0.6);                          
+      120 +  } catch(e) { /* 소리 미지원 환경 무시 */ }                  
+      121 +}                                                             
+      122 +                                                              
+      123  /* ── Undo Toast ── */
+      124  // ✓ OK: 토스트 뜬 상태에서 또 삭제 → clearTimeout 후 새 토스
+           트
+      125  function showUndoToast() {
+
+⏺ Update(done/app.js)
+  ⎿  Added 77 lines
+      174    if (toast) toast.remove();
+      175  }
+      176  
+      177 +/* ── Pomodoro ── */                                          
+      178 +function updatePomDisplay() {                                 
+      179 +  document.getElementById('pom-display').textContent = formatT
+          +ime(pomState.remaining);                                      
+      180 +  document.getElementById('pom-start').textContent   = pomStat
+          +e.running ? '⏸ 일시정지' : '▶ 시작';                          
+      181 +  const modeEl       = document.getElementById('pom-mode');   
+      182 +  modeEl.textContent = pomState.mode === 'focus' ? '집중' : ' 
+          +휴식';                                                        
+      183 +  modeEl.className   = pomState.mode;                         
+      184 +}                                                             
+      185 +                                                              
+      186 +function showPomToast(message) {                              
+      187 +  let toast = document.getElementById('pom-toast');           
+      188 +  if (!toast) {                                               
+      189 +    toast = document.createElement('div');                    
+      190 +    toast.id = 'pom-toast';                                   
+      191 +    toast.setAttribute('role', 'status');                     
+      192 +    toast.setAttribute('aria-live', 'polite');                
+      193 +    document.body.appendChild(toast);                         
+      194 +  }                                                           
+      195 +  toast.style.animation = 'none';                             
+      196 +  void toast.offsetHeight;                                    
+      197 +  toast.style.animation = '';                                 
+      198 +  toast.textContent = message;                                
+      199 +  clearTimeout(toast._timer);                                 
+      200 +  toast._timer = setTimeout(() => toast.remove(), 3000);      
+      201 +}                                                             
+      202 +                                                              
+      203 +function tickPomodoro() {                                     
+      204 +  pomState.remaining--;                                       
+      205 +  if (pomState.remaining <= 0) {                              
+      206 +    onPomComplete();                                          
+      207 +  } else {                                                    
+      208 +    updatePomDisplay();                                       
+      209 +  }                                                           
+      210 +}                                                             
+      211 +                                                              
+      212 +function onPomComplete() {                                    
+      213 +  clearInterval(pomState.intervalId);                         
+      214 +  pomState.intervalId = null;                                 
+      215 +  pomState.running    = false;                                
+      216 +  if (pomState.mode === 'focus') {                            
+      217 +    pomState.round++;                                         
+      218 +    pomState.mode      = 'break';                             
+      219 +    pomState.remaining = POMODORO.shortBreak;                 
+      220 +    showPomToast(`🍅 집중 완료! 휴식을 시작해요. (${pomState.r
+          +ound}번째)`);                                                 
+      221 +  } else {                                                    
+      222 +    pomState.mode      = 'focus';                             
+      223 +    pomState.remaining = POMODORO.focus;                      
+      224 +    showPomToast('☕ 휴식 완료! 다시 집중해볼까요?');         
+      225 +  }                                                           
+      226 +  playDoneSound();                                            
+      227 +  updatePomDisplay();                                         
+      228 +}                                                             
+      229 +                                                              
+      230 +function startPomodoro() {                                    
+      231 +  if (pomState.running) return;                               
+      232 +  pomState.running    = true;                                 
+      233 +  pomState.intervalId = setInterval(tickPomodoro, 1000);      
+      234 +  updatePomDisplay();                                         
+      235 +}                                                             
+      236 +                                                              
+      237 +function pausePomodoro() {                                    
+      238 +  if (!pomState.running) return;                              
+      239 +  clearInterval(pomState.intervalId);                         
+      240 +  pomState.intervalId = null;                                 
+      241 +  pomState.running    = false;                                
+      242 +  updatePomDisplay();                                         
+      243 +}                                                             
+      244 +                                                              
+      245 +function resetPomodoro() {                                    
+      246 +  clearInterval(pomState.intervalId);                         
+      247 +  pomState.intervalId = null;                                 
+      248 +  pomState.running    = false;                                
+      249 +  pomState.mode       = 'focus';                              
+      250 +  pomState.remaining  = POMODORO.focus;                       
+      251 +  updatePomDisplay();                                         
+      252 +}                                                             
+      253 +                                                              
+      254  /* ── CRUD ── */
+      255  function addTask(text, category = 'work') {
+      256    const { ok, value, reason } = validateText(text);
+
+⏺ Update(done/app.js)
+  ⎿  Added 2 lines, removed 1 line
+      267      completed: false,
+      268      createdAt: now,
+      269      updatedAt: now,
+      270 -    order: tasks.length,                                      
+      270 +    order:   tasks.length,                                    
+      271 +    elapsed: 0,                                               
+      272    };
+      273  
+      274    tasks.push(task);
+
+⏺ Update(done/app.js)
+  ⎿  Added 1 line
+      277  }
+      278  
+      279  function deleteTask(id) {
+      280 +  stopCardTimer(id);                                          
+      281    const target = tasks.find(t => t.id === id);
+      282    if (!target) return;
+      283    lastDeleted = { ...target };
+
+⏺ Update(done/app.js)
+  ⎿  Added 1 line
+      293    if (!task) return;
+      294    task.completed = !task.completed;
+      295    task.updatedAt = Date.now();
+      296 +  if (task.completed) stopCardTimer(id);                      
+      297    saveToStorage();
+      298    renderTasks();
+      299  }
+
+⏺ 이제 카드 타이머 함수를 추가하고 createTaskCard를 수정합니다.
+
+⏺ Update(done/app.js)
+  ⎿  Added 40 lines
+      447    });
+      448  }
+      449  
+      450 +/* ── Card Timers ── */                                       
+      451 +function updateCardTimerDisplay(taskId) {                     
+      452 +  const el = document.querySelector(`[data-id="${taskId}"] .ca
+          +rd-timer-text`);                                              
+      453 +  if (!el) return;                                            
+      454 +  const task = tasks.find(t => t.id === taskId);              
+      455 +  if (!task) return;                                          
+      456 +  const timerState  = cardTimers.get(taskId);                 
+      457 +  el.textContent    = '⏱ ' + formatElapsed(task.elapsed);     
+      458 +  el.classList.toggle('running', timerState?.running || false)
+          +;                                                             
+      459 +  const btn = document.querySelector(`[data-id="${taskId}"] .c
+          +ard-timer-btn`);                                              
+      460 +  if (btn) btn.textContent = timerState?.running ? '⏸' : '▶'; 
+      461 +}                                                             
+      462 +                                                              
+      463 +function startCardTimer(taskId) {                             
+      464 +  const existing = cardTimers.get(taskId);                    
+      465 +  if (existing?.running) return;                              
+      466 +  const intervalId = setInterval(() => {                      
+      467 +    const task = tasks.find(t => t.id === taskId);            
+      468 +    if (!task) { stopCardTimer(taskId); return; }             
+      469 +    task.elapsed = (task.elapsed || 0) + 1;                   
+      470 +    saveToStorage();                                          
+      471 +    updateCardTimerDisplay(taskId);                           
+      472 +  }, 1000);                                                   
+      473 +  cardTimers.set(taskId, { intervalId, running: true });      
+      474 +  updateCardTimerDisplay(taskId);                             
+      475 +}                                                             
+      476 +                                                              
+      477 +function stopCardTimer(taskId) {                              
+      478 +  const timerState = cardTimers.get(taskId);                  
+      479 +  if (!timerState) return;                                    
+      480 +  clearInterval(timerState.intervalId);                       
+      481 +  cardTimers.set(taskId, { intervalId: null, running: false })
+          +;                                                             
+      482 +  updateCardTimerDisplay(taskId);                             
+      483 +}                                                             
+      484 +                                                              
+      485 +function toggleCardTimer(taskId) {                            
+      486 +  const timerState = cardTimers.get(taskId);                  
+      487 +  timerState?.running ? stopCardTimer(taskId) : startCardTimer
+          +(taskId);                                                     
+      488 +}                                                             
+      489 +                                                              
+      490  function createTaskCard(task) {
+      491    const li = document.createElement('li');
+      492    li.className        = 'task-card' + (task.completed ? ' comp
+           leted' : '');
+
+⏺ 이제 createTaskCard 안에 타이머 행을 추가합니다.
+
+⏺ Update(done/app.js)
+  ⎿  Added 26 lines
+      524    deleteBtn.addEventListener('click', () => deleteTask(task.id
+           ));
+      525  
+      526    li.append(checkbox, dot, textSpan, deleteBtn);
+      527 +                                                              
+      528 +  // Timer row                                                
+      529 +  const timerState = cardTimers.get(task.id);                 
+      530 +  const isRunning  = timerState?.running || false;            
+      531 +                                                              
+      532 +  const timerRow = document.createElement('div');             
+      533 +  timerRow.className = 'card-timer';                          
+      534 +                                                              
+      535 +  const timerText = document.createElement('span');           
+      536 +  timerText.className   = 'card-timer-text' + (isRunning ? ' r
+          +unning' : '');                                                
+      537 +  timerText.textContent = '⏱ ' + formatElapsed(task.elapsed ||
+          + 0);                                                          
+      538 +                                                              
+      539 +  const timerBtn = document.createElement('button');          
+      540 +  timerBtn.className   = 'card-timer-btn';                    
+      541 +  timerBtn.textContent = isRunning ? '⏸' : '▶';               
+      542 +  timerBtn.setAttribute('aria-label', isRunning ? '타이머 일시
+          +정지' : '타이머 시작');                                       
+      543 +  if (!task.completed) {                                      
+      544 +    timerBtn.addEventListener('click', () => toggleCardTimer(t
+          +ask.id));                                                     
+      545 +  } else {                                                    
+      546 +    timerBtn.disabled      = true;                            
+      547 +    timerBtn.style.opacity = '0.4';                           
+      548 +  }                                                           
+      549 +                                                              
+      550 +  timerRow.append(timerText, timerBtn);                       
+      551 +  li.appendChild(timerRow);                                   
+      552 +                                                              
+      553    addDragEvents(li, task);
+      554  
+      555    return li;
+
+⏺ 이제 bindEvents에 포모도로 버튼 이벤트를 추가합니다.
+
+⏺ Update(done/app.js)  ⎿  Added 6 lines
+      638    const themeToggle    = document.getElementById('theme-toggle
+           ');
+      639    const clearBtn       = document.getElementById('clear-comple
+           ted');
+      640  
+      641 +  // 포모도로                                                 
+      642 +  document.getElementById('pom-start').addEventListener('click
+          +', () => {                                                    
+      643 +    pomState.running ? pausePomodoro() : startPomodoro();     
+      644 +  });                                                         
+      645 +  document.getElementById('pom-reset').addEventListener('click
+          +', resetPomodoro);                                            
+      646 +                                                              
+      647    // 테마 토글
+      648    themeToggle.addEventListener('click', toggleTheme);
+      649  
+
+⏺ 마지막으로 init에서 elapsed 폴백 처리와 visibilitychange를 추가합니다.
+
+⏺ Update(done/app.js)
+  ⎿  Added 2 lines, removed 1 line
+      688  /* ── Init ── */
+      689  // ✓ OK: 새로고침 후 데이터·테마·정렬 순서 모두 복원
+      690  function init() {
+      691 -  tasks = loadFromStorage();                                  
+      691 +  // elapsed 없는 기존 데이터 호환                            
+      692 +  tasks = loadFromStorage().map(t => ({ elapsed: 0, ...t })); 
+      693  
+      694    // 저장된 테마 복원 (인라인 스크립트가 이미 html class를 설
+           정했으므로 아이콘만 갱신)
+      695    const savedTheme = localStorage.getItem(THEME_KEY) || 'light
+           ';
+
+⏺ Update(done/app.js)
+  ⎿  Added 6 lines
+      697  
+      698    bindEvents();
+      699    renderTasks();
+      700 +  updatePomDisplay();                                         
+      701 +                                                              
+      702 +  // 탭 복귀 시 포모도로 디스플레이 즉시 갱신                 
+      703 +  document.addEventListener('visibilitychange', () => {       
+      704 +    if (!document.hidden) updatePomDisplay();                 
+      705 +  });                                                         
+      706  }
+      707  
+      708  init();
+
+⏺ 이제 style.css에 스타일을 추가합니다.
+
+⏺ Update(done/style.css)
+  ⎿  Added 121 lines
+      401    opacity: 0.75;
+      402  }
+      403  
+      404 +/* ── Pomodoro Panel ── */                                    
+      405 +#pomodoro {                                                   
+      406 +  display: flex;                                              
+      407 +  align-items: center;                                        
+      408 +  gap: 16px;                                                  
+      409 +  padding: 12px 0;                                            
+      410 +  border-bottom: 1px solid var(--border);                     
+      411 +  font-family: 'SF Mono', 'Fira Code', monospace;             
+      412 +}                                                             
+      413 +                                                              
+      414 +#pom-label {                                                  
+      415 +  font-size: 13px;                                            
+      416 +  color: var(--muted);                                        
+      417 +  white-space: nowrap;                                        
+      418 +}                                                             
+      419 +                                                              
+      420 +#pom-display {                                                
+      421 +  font-size: 28px;                                            
+      422 +  font-weight: 600;                                           
+      423 +  color: var(--accent);                                       
+      424 +  min-width: 90px;                                            
+      425 +  letter-spacing: 1px;                                        
+      426 +}                                                             
+      427 +                                                              
+      428 +#pom-start,                                                   
+      429 +#pom-reset {                                                  
+      430 +  padding: 6px 12px;                                          
+      431 +  border: 1px solid var(--border);                            
+      432 +  border-radius: 6px;                                         
+      433 +  background: transparent;                                    
+      434 +  color: var(--text);                                         
+      435 +  font-size: 13px;                                            
+      436 +  cursor: pointer;                                            
+      437 +  transition: border-color 0.15s, color 0.15s;                
+      438 +  white-space: nowrap;                                        
+      439 +}                                                             
+      440 +                                                              
+      441 +#pom-start:hover,                                             
+      442 +#pom-reset:hover {                                            
+      443 +  border-color: var(--accent);                                
+      444 +  color: var(--accent);                                       
+      445 +}                                                             
+      446 +                                                              
+      447 +#pom-mode {                                                   
+      448 +  font-size: 11px;                                            
+      449 +  padding: 2px 8px;                                           
+      450 +  border-radius: 10px;                                        
+      451 +  background: var(--surface);                                 
+      452 +  border: 1px solid var(--border);                            
+      453 +  white-space: nowrap;                                        
+      454 +}                                                             
+      455 +                                                              
+      456 +#pom-mode.focus {                                             
+      457 +  color: var(--accent);                                       
+      458 +  border-color: var(--accent);                                
+      459 +}                                                             
+      460 +                                                              
+      461 +#pom-mode.break {                                             
+      462 +  color: var(--cat-study);                                    
+      463 +  border-color: var(--cat-study);                             
+      464 +}                                                             
+      465 +                                                              
+      466 +/* Pomodoro Toast */                                          
+      467 +#pom-toast {                                                  
+      468 +  position: fixed;                                            
+      469 +  bottom: 72px;                                               
+      470 +  left: 50%;                                                  
+      471 +  transform: translateX(-50%);                                
+      472 +  background: var(--surface);                                 
+      473 +  border: 1px solid var(--border);                            
+      474 +  padding: 10px 16px;                                         
+      475 +  border-radius: 8px;                                         
+      476 +  font-size: 13px;                                            
+      477 +  white-space: nowrap;                                        
+      478 +  z-index: 100;                                               
+      479 +  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);                 
+      480 +  animation: slideUp 0.2s ease;                               
+      481 +}                                                             
+      482 +                                                              
+      483 +/* ── Card Timer ── */                                        
+      484 +.task-card {                                                  
+      485 +  flex-wrap: wrap;                                            
+      486 +}                                                             
+      487 +                                                              
+      488 +.card-timer {                                                 
+      489 +  display: flex;                                              
+      490 +  align-items: center;                                        
+      491 +  gap: 8px;                                                   
+      492 +  width: 100%;                                                
+      493 +  margin-top: 8px;                                            
+      494 +  padding-top: 8px;                                           
+      495 +  border-top: 1px solid var(--border);                        
+      496 +}                                                             
+      497 +                                                              
+      498 +.card-timer-text {                                            
+      499 +  font-family: 'SF Mono', 'Fira Code', monospace;             
+      500 +  font-size: 12px;                                            
+      501 +  color: var(--muted);                                        
+      502 +  flex: 1;                                                    
+      503 +}                                                             
+      504 +                                                              
+      505 +.card-timer-text.running {                                    
+      506 +  color: var(--accent);                                       
+      507 +}                                                             
+      508 +                                                              
+      509 +.card-timer-btn {                                             
+      510 +  font-size: 11px;                                            
+      511 +  padding: 2px 8px;                                           
+      512 +  border-radius: 6px;                                         
+      513 +  border: 1px solid var(--border);                            
+      514 +  background: transparent;                                    
+      515 +  cursor: pointer;                                            
+      516 +  color: var(--muted);                                        
+      517 +  transition: border-color 0.15s, color 0.15s;                
+      518 +}                                                             
+      519 +                                                              
+      520 +.card-timer-btn:hover:not(:disabled) {                        
+      521 +  border-color: var(--accent);                                
+      522 +  color: var(--accent);                                       
+      523 +}                                                             
+      524 +                                                              
+      525  /* Empty State */
+      526  #empty-state {
+      527    text-align: center;
+
+⏺ 최종 결과물을 확인합니다.
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ 모두 정상적으로 적용됐습니다. 구현 내용 요약:
+
+  ---
+  추가된 기능
+
+  1. 포모도로 패널 (헤더 고정)
+  - 25분 집중 → 5분 휴식 자동 전환
+  - ▶ 시작 / ⏸ 일시정지 / ↺ 리셋 버튼
+  - 집중/휴식 모드 배지 (색상 구분)
+  - 완료 시 소리 + 토스트 알림 (🍅 집중 완료! 휴식을 시작해요. (N번째))
+
+  2. 카드별 스톱워치
+  - 각 할 일 카드 하단에 ⏱ 00:00 + ▶/⏸ 버튼
+  - 전체 재렌더링 없이 해당 카드 텍스트만 업데이트 (깜빡임 없음)
+  - elapsed 값이 localStorage에 저장되어 새로고침 후에도 복원
+  - 할 일 완료 토글 / 삭제 시 타이머 자동 정지
+
+  3. Web Audio 알림음
+  - 외부 파일 없이 오실레이터로 880Hz → 660Hz 딩 소리
+  - 포모도로 완료 시에만 재생, 미지원 환경에서 조용히 무시
+
+✻ Crunched for 5m 4s

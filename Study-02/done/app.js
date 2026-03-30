@@ -24,6 +24,14 @@ let lastDeleted   = null;
 let undoTimer     = null;
 let dragSrcId     = null;
 
+let pomState = {
+  elapsed:    0,
+  running:    false,
+  intervalId: null,
+  totalToday: 0,
+};
+const cardTimers = new Map();
+
 /* ── Storage ── */
 // ✓ OK: QuotaExceededError catch → 콘솔 경고, 앱 크래시 방지
 function saveToStorage() {
@@ -64,6 +72,19 @@ function validateText(text) {
   if (!trimmed) return { ok: false, reason: '내용을 입력해 주세요.' };
   if (trimmed.length > MAX_TEXT_LEN) return { ok: false, reason: `최대 ${MAX_TEXT_LEN}자까지 입력 가능합니다.` };
   return { ok: true, value: trimmed };
+}
+
+/* ── Timer Helpers ── */
+function formatTime(sec) {
+  const m = Math.floor(sec / 60).toString().padStart(2, '0');
+  const s = (sec % 60).toString().padStart(2, '0');
+  return m + ':' + s;
+}
+
+function formatElapsed(sec) {
+  if (sec < 3600) return formatTime(sec);
+  const h = Math.floor(sec / 3600);
+  return h + ':' + formatTime(sec % 3600);
 }
 
 /* ── Theme ── */
@@ -134,6 +155,57 @@ function removeUndoToast() {
   if (toast) toast.remove();
 }
 
+/* ── Pomodoro (Stopwatch) ── */
+const TODAY_FOCUS_KEY = 'done_today_focus';
+
+function savePomToday() {
+  const date = new Date().toISOString().slice(0, 10);
+  localStorage.setItem(TODAY_FOCUS_KEY, JSON.stringify({ date, total: pomState.totalToday }));
+}
+
+function loadPomToday() {
+  try {
+    const raw = localStorage.getItem(TODAY_FOCUS_KEY);
+    if (!raw) return 0;
+    const { date, total } = JSON.parse(raw);
+    return date === new Date().toISOString().slice(0, 10) ? total : 0;
+  } catch { return 0; }
+}
+
+function updatePomDisplay() {
+  document.getElementById('pom-display').textContent = formatElapsed(pomState.elapsed);
+  document.getElementById('pom-start').textContent   = pomState.running ? '⏸ 일시정지' : '▶ 시작';
+}
+
+function startPomodoro() {
+  if (pomState.running) return;
+  pomState.running    = true;
+  pomState.intervalId = setInterval(() => {
+    pomState.elapsed++;
+    pomState.totalToday++;
+    updatePomDisplay();
+    updateDashboard();
+    savePomToday();
+  }, 1000);
+  updatePomDisplay();
+}
+
+function pausePomodoro() {
+  if (!pomState.running) return;
+  clearInterval(pomState.intervalId);
+  pomState.intervalId = null;
+  pomState.running    = false;
+  updatePomDisplay();
+}
+
+function resetPomodoro() {
+  clearInterval(pomState.intervalId);
+  pomState.intervalId = null;
+  pomState.running    = false;
+  pomState.elapsed    = 0;
+  updatePomDisplay();
+}
+
 /* ── CRUD ── */
 function addTask(text, category = 'work') {
   const { ok, value, reason } = validateText(text);
@@ -150,7 +222,8 @@ function addTask(text, category = 'work') {
     completed: false,
     createdAt: now,
     updatedAt: now,
-    order: tasks.length,
+    order:   tasks.length,
+    elapsed: 0,
   };
 
   tasks.push(task);
@@ -159,6 +232,7 @@ function addTask(text, category = 'work') {
 }
 
 function deleteTask(id) {
+  stopCardTimer(id);
   const target = tasks.find(t => t.id === id);
   if (!target) return;
   lastDeleted = { ...target };
@@ -174,6 +248,7 @@ function toggleComplete(id) {
   if (!task) return;
   task.completed = !task.completed;
   task.updatedAt = Date.now();
+  if (task.completed) stopCardTimer(id);
   saveToStorage();
   renderTasks();
 }
@@ -199,11 +274,10 @@ function clearCompleted() {
   renderTasks();
 }
 
-/* ── Render: Header Dashboard ── */
-const GAUGE_CIRCUMFERENCE = 2 * Math.PI * 34; // ≈ 213.6
+/* ── Render: Dashboard ── */
+const DASH_CIRC = 213.628;
 
-// ✓ OK: total === 0 일 때 ratio = 0 처리 (NaN 방지)
-function updateHeader() {
+function updateDashboard() {
   const total     = tasks.length;
   const completed = tasks.filter(t => t.completed).length;
   const ratio     = total === 0 ? 0 : completed / total;
@@ -211,31 +285,32 @@ function updateHeader() {
   // Gauge
   document.getElementById('gauge-progress').setAttribute(
     'stroke-dasharray',
-    (GAUGE_CIRCUMFERENCE * ratio).toFixed(1) + ' ' + GAUGE_CIRCUMFERENCE
+    (DASH_CIRC * ratio).toFixed(2) + ' ' + DASH_CIRC
   );
-  document.getElementById('gauge-text').textContent = Math.round(ratio * 100) + '%';
+  document.getElementById('gauge-pct').textContent = Math.round(ratio * 100) + '%';
 
   // Category counters
   ['work', 'personal', 'study'].forEach(cat => {
-    const catTotal     = tasks.filter(t => t.category === cat).length;
-    const catCompleted = tasks.filter(t => t.category === cat && t.completed).length;
-    document.getElementById(`counter-${cat}`).textContent = `${catCompleted} / ${catTotal}`;
+    const catTasks = tasks.filter(t => t.category === cat);
+    document.getElementById('cnt-' + cat).textContent =
+      catTasks.filter(t => t.completed).length + ' / ' + catTasks.length;
   });
 
-  // Summary text
-  const summary = document.getElementById('header-summary');
+  // Summary
+  const summaryEl = document.getElementById('dashboard-summary');
   if (total === 0) {
-    summary.textContent = '할 일을 추가해 보세요';
-  } else if (completed === 0) {
-    summary.textContent = '아직 완료한 일이 없어요';
+    summaryEl.textContent = '할 일을 추가해 보세요';
   } else {
-    summary.textContent = `오늘 완료 ${completed}개 · 남은 할 일 ${total - completed}개`;
+    summaryEl.textContent = '✓ ' + completed + '개 완료 · ' + (total - completed) + '개 남음';
   }
+
+  // Today focus time
+  document.getElementById('today-focus').textContent = formatElapsed(pomState.totalToday);
 
   // 완료 일괄 삭제 버튼 — 완료 항목 있을 때만 노출
   const clearBtn = document.getElementById('clear-completed');
   if (completed > 0) {
-    clearBtn.textContent = `완료 삭제 (${completed})`;
+    clearBtn.textContent   = `완료 삭제 (${completed})`;
     clearBtn.style.display = '';
   } else {
     clearBtn.style.display = 'none';
@@ -327,6 +402,46 @@ function addDragEvents(li, task) {
   });
 }
 
+/* ── Card Timers ── */
+function updateCardTimerDisplay(taskId) {
+  const el = document.querySelector(`[data-id="${taskId}"] .card-timer-text`);
+  if (!el) return;
+  const task = tasks.find(t => t.id === taskId);
+  if (!task) return;
+  const timerState  = cardTimers.get(taskId);
+  el.textContent    = '⏱ ' + formatElapsed(task.elapsed);
+  el.classList.toggle('running', timerState?.running || false);
+  const btn = document.querySelector(`[data-id="${taskId}"] .card-timer-btn`);
+  if (btn) btn.textContent = timerState?.running ? '⏸' : '▶';
+}
+
+function startCardTimer(taskId) {
+  const existing = cardTimers.get(taskId);
+  if (existing?.running) return;
+  const intervalId = setInterval(() => {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) { stopCardTimer(taskId); return; }
+    task.elapsed = (task.elapsed || 0) + 1;
+    saveToStorage();
+    updateCardTimerDisplay(taskId);
+  }, 1000);
+  cardTimers.set(taskId, { intervalId, running: true });
+  updateCardTimerDisplay(taskId);
+}
+
+function stopCardTimer(taskId) {
+  const timerState = cardTimers.get(taskId);
+  if (!timerState) return;
+  clearInterval(timerState.intervalId);
+  cardTimers.set(taskId, { intervalId: null, running: false });
+  updateCardTimerDisplay(taskId);
+}
+
+function toggleCardTimer(taskId) {
+  const timerState = cardTimers.get(taskId);
+  timerState?.running ? stopCardTimer(taskId) : startCardTimer(taskId);
+}
+
 function createTaskCard(task) {
   const li = document.createElement('li');
   li.className        = 'task-card' + (task.completed ? ' completed' : '');
@@ -364,6 +479,32 @@ function createTaskCard(task) {
   deleteBtn.addEventListener('click', () => deleteTask(task.id));
 
   li.append(checkbox, dot, textSpan, deleteBtn);
+
+  // Timer row
+  const timerState = cardTimers.get(task.id);
+  const isRunning  = timerState?.running || false;
+
+  const timerRow = document.createElement('div');
+  timerRow.className = 'card-timer';
+
+  const timerText = document.createElement('span');
+  timerText.className   = 'card-timer-text' + (isRunning ? ' running' : '');
+  timerText.textContent = '⏱ ' + formatElapsed(task.elapsed || 0);
+
+  const timerBtn = document.createElement('button');
+  timerBtn.className   = 'card-timer-btn';
+  timerBtn.textContent = isRunning ? '⏸' : '▶';
+  timerBtn.setAttribute('aria-label', isRunning ? '타이머 일시정지' : '타이머 시작');
+  if (!task.completed) {
+    timerBtn.addEventListener('click', () => toggleCardTimer(task.id));
+  } else {
+    timerBtn.disabled      = true;
+    timerBtn.style.opacity = '0.4';
+  }
+
+  timerRow.append(timerText, timerBtn);
+  li.appendChild(timerRow);
+
   addDragEvents(li, task);
 
   return li;
@@ -436,12 +577,12 @@ function renderTasks() {
       ? '할 일이 없습니다. 새로운 할 일을 추가해 보세요!'
       : `${label} 할 일이 없어요`;
     list.appendChild(empty);
-    updateHeader();
+    updateDashboard();
     return;
   }
 
   sorted.forEach(task => list.appendChild(createTaskCard(task)));
-  updateHeader();
+  updateDashboard();
 }
 
 /* ── Event Bindings ── */
@@ -451,6 +592,12 @@ function bindEvents() {
   const categorySelect = document.getElementById('category-select');
   const themeToggle    = document.getElementById('theme-toggle');
   const clearBtn       = document.getElementById('clear-completed');
+
+  // 포모도로
+  document.getElementById('pom-start').addEventListener('click', () => {
+    pomState.running ? pausePomodoro() : startPomodoro();
+  });
+  document.getElementById('pom-reset').addEventListener('click', resetPomodoro);
 
   // 테마 토글
   themeToggle.addEventListener('click', toggleTheme);
@@ -496,14 +643,22 @@ function bindEvents() {
 /* ── Init ── */
 // ✓ OK: 새로고침 후 데이터·테마·정렬 순서 모두 복원
 function init() {
-  tasks = loadFromStorage();
+  // elapsed 없는 기존 데이터 호환
+  tasks = loadFromStorage().map(t => ({ elapsed: 0, ...t }));
 
   // 저장된 테마 복원 (인라인 스크립트가 이미 html class를 설정했으므로 아이콘만 갱신)
   const savedTheme = localStorage.getItem(THEME_KEY) || 'light';
   applyTheme(savedTheme);
 
+  pomState.totalToday = loadPomToday();
   bindEvents();
   renderTasks();
+  updatePomDisplay();
+
+  // 탭 복귀 시 포모도로 디스플레이 즉시 갱신
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) updatePomDisplay();
+  });
 }
 
 init();

@@ -89,44 +89,6 @@ body {
   opacity: 0.75;
 }
 
-/* SVG Gauge */
-#gauge {
-  flex-shrink: 0;
-}
-
-/* Category Counters */
-#cat-counters {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 110px;
-}
-
-.cat-counter {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-}
-
-.cat-counter-label {
-  color: var(--muted);
-  min-width: 28px;
-}
-
-.cat-counter-value {
-  font-weight: 600;
-  color: var(--text);
-  margin-left: auto;
-}
-
-/* Header Summary */
-#header-summary {
-  font-size: 13px;
-  color: var(--muted);
-  padding-top: 4px;
-}
-
 /* ── Filter Tabs ── */
 #filters {
   display: flex;
@@ -399,6 +361,177 @@ body {
 
 #undo-toast .undo-btn:hover {
   opacity: 0.75;
+}
+
+/* ── Pomodoro Panel ── */
+#pomodoro {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+#pom-label {
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+#pom-display {
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--accent);
+  min-width: 90px;
+  letter-spacing: 1px;
+}
+
+#pom-start,
+#pom-reset {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+
+#pom-start:hover,
+#pom-reset:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+#pom-mode {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+#pom-mode.focus {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Pomodoro Toast */
+#pom-toast {
+  position: fixed;
+  bottom: 72px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  white-space: nowrap;
+  z-index: 100;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  animation: slideUp 0.2s ease;
+}
+
+/* ── Dashboard ── */
+#dashboard {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.dash-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cat-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.cat-count {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  color: var(--text);
+  margin-left: auto;
+}
+
+#dashboard-summary {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.focus-block {
+  text-align: center;
+}
+
+.focus-label {
+  font-size: 10px;
+  color: var(--muted);
+  margin-bottom: 4px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+#today-focus {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+/* ── Card Timer ── */
+.task-card {
+  flex-wrap: wrap;
+}
+
+.card-timer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.card-timer-text {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  color: var(--muted);
+  flex: 1;
+}
+
+.card-timer-text.running {
+  color: var(--accent);
+}
+
+.card-timer-btn {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  cursor: pointer;
+  color: var(--muted);
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.card-timer-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 /* Empty State */

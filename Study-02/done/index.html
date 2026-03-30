@@ -18,38 +18,54 @@
       <div id="header-top">
         <h1>DONE</h1>
         <button id="theme-toggle" aria-label="테마 전환">🌙</button>
-        <svg id="gauge" viewBox="0 0 80 80" width="80" height="80" aria-hidden="true">
+      </div>
+      <div id="pomodoro">
+        <span id="pom-label">🍅 포모도로</span>
+        <span id="pom-display">25:00</span>
+        <button id="pom-start" aria-label="포모도로 시작/일시정지">▶ 시작</button>
+        <button id="pom-reset" aria-label="포모도로 리셋">↺ 리셋</button>
+        <span id="pom-mode" class="focus">집중</span>
+      </div>
+    </header>
+
+    <div id="dashboard">
+      <div class="dash-section">
+        <svg id="dash-gauge" viewBox="0 0 80 80" width="80" height="80" aria-hidden="true">
           <circle cx="40" cy="40" r="34"
             fill="none" stroke="var(--border)" stroke-width="6"/>
           <circle id="gauge-progress" cx="40" cy="40" r="34"
             fill="none" stroke="var(--accent)" stroke-width="6"
             stroke-linecap="round"
-            stroke-dasharray="0 213.6"
+            stroke-dasharray="0 213.628"
             transform="rotate(-90 40 40)"/>
-          <text id="gauge-text" x="40" y="40"
+          <text id="gauge-pct" x="40" y="40"
             text-anchor="middle" dominant-baseline="central"
             font-size="14" font-weight="600" fill="var(--accent)">0%</text>
         </svg>
-        <div id="cat-counters" aria-hidden="true">
-          <div class="cat-counter" data-cat="work">
-            <span class="cat-dot cat-work"></span>
-            <span class="cat-counter-label">업무</span>
-            <span class="cat-counter-value" id="counter-work">0 / 0</span>
-          </div>
-          <div class="cat-counter" data-cat="personal">
-            <span class="cat-dot cat-personal"></span>
-            <span class="cat-counter-label">개인</span>
-            <span class="cat-counter-value" id="counter-personal">0 / 0</span>
-          </div>
-          <div class="cat-counter" data-cat="study">
-            <span class="cat-dot cat-study"></span>
-            <span class="cat-counter-label">공부</span>
-            <span class="cat-counter-value" id="counter-study">0 / 0</span>
-          </div>
-        </div>
       </div>
-      <p id="header-summary" aria-live="polite"></p>
-    </header>
+      <div class="dash-section">
+        <div class="cat-row">
+          <span class="cat-dot cat-work"></span>
+          <span>업무</span>
+          <span class="cat-count" id="cnt-work">0 / 0</span>
+        </div>
+        <div class="cat-row">
+          <span class="cat-dot cat-personal"></span>
+          <span>개인</span>
+          <span class="cat-count" id="cnt-personal">0 / 0</span>
+        </div>
+        <div class="cat-row">
+          <span class="cat-dot cat-study"></span>
+          <span>공부</span>
+          <span class="cat-count" id="cnt-study">0 / 0</span>
+        </div>
+        <p id="dashboard-summary" aria-live="polite"></p>
+      </div>
+      <div class="dash-section focus-block">
+        <div class="focus-label">오늘 집중</div>
+        <div id="today-focus">00:00</div>
+      </div>
+    </div>
 
     <nav id="filters" role="tablist" aria-label="카테고리 필터">
       <button class="filter-tab active" role="tab" aria-selected="true"  data-filter="all">전체</button>
